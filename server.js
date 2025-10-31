@@ -36,24 +36,36 @@ app.post("/api/upload", upload.single("adFile"), (req, res) => {
 });
 
 // ---- Twitter Proxy ----
-app.all("/twitter/*", async (req, res) => {
-  try {
-    const endpoint = req.params[0];
-    const method = req.method;
-    const bearer = process.env.TWITTER_BEARER;
-    const url = `https://api.twitter.com/2/${endpoint}`;
-    const options = {
-      method,
-      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
-    };
-    if (["POST", "PUT"].includes(method)) options.body = JSON.stringify(req.body);
+// ================== TWITTER PROXY API ==================
+import fetch from "node-fetch";
 
-    const response = await fetch(url, options);
+app.use(express.json());
+
+// Fetch Twitter Profile, Tweets, or Metrics via backend proxy
+app.all("/twitter/:endpoint(*)", async (req, res) => {
+  try {
+    const endpoint = req.params.endpoint;
+    const method = req.method;
+    const body = req.body;
+
+    // Your saved Bearer token from your Twitter App (OAuth 2.0 User Context)
+    const token = process.env.TWITTER_BEARER_TOKEN;
+    if (!token) return res.status(401).json({ error: "Missing Twitter Bearer Token" });
+
+    const response = await fetch(`https://api.twitter.com/2/${endpoint}`, {
+      method,
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: method === "POST" ? JSON.stringify(body) : undefined
+    });
+
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Twitter proxy failed" });
+    console.error("Twitter proxy error:", err);
+    res.status(500).json({ error: "Twitter proxy failed", details: err.message });
   }
 });
 
