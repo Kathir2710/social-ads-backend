@@ -1,29 +1,21 @@
+// backend/server.js
 import express from "express";
 import cors from "cors";
 import multer from "multer";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import path from "path";
 import fs from "fs";
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ CORS fix (must come before any routes)
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://data-add-management.netlify.app");
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
+app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
-// ---- File Upload ----
+// Storage setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = "uploads/";
@@ -36,6 +28,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// ---- Upload Route ----
 app.post("/api/upload", upload.single("adFile"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
@@ -43,33 +36,28 @@ app.post("/api/upload", upload.single("adFile"), (req, res) => {
 });
 
 // ---- Twitter Proxy ----
-app.all("/twitter/:endpoint(*)", async (req, res) => {
+app.all("/twitter/*", async (req, res) => {
   try {
-    const endpoint = req.params.endpoint;
+    const endpoint = req.params[0];
     const method = req.method;
-    const body = req.body;
-    const token = process.env.TWITTER_BEARER;
-
-    if (!token) return res.status(401).json({ error: "Missing Twitter Bearer Token" });
-
-    const response = await fetch(`https://api.twitter.com/2/${endpoint}`, {
+    const bearer = process.env.TWITTER_BEARER;
+    const url = `https://api.twitter.com/2/${endpoint}`;
+    const options = {
       method,
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: method === "POST" ? JSON.stringify(body) : undefined
-    });
+      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+    };
+    if (["POST", "PUT"].includes(method)) options.body = JSON.stringify(req.body);
 
+    const response = await fetch(url, options);
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error("Twitter proxy error:", err);
-    res.status(500).json({ error: "Twitter proxy failed", details: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Twitter proxy failed" });
   }
 });
 
-// ---- YouTube Proxy ----
+// // ---- YouTube Proxy (for analytics / uploads) ----
 // app.all("/youtube/*", async (req, res) => {
 //   try {
 //     const endpoint = req.params[0];
@@ -90,4 +78,4 @@ app.all("/twitter/:endpoint(*)", async (req, res) => {
 //   }
 // });
 
-// app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+// app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
