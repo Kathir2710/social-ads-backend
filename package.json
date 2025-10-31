@@ -1,0 +1,27 @@
+{
+  "name": "social-ads-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Social Ad Management - handles uploads, metrics, and social integrations",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "express",
+    "social-ads",
+    "backend",
+    "api",
+    "ads-management"
+  ],
+  "author": "Your Kathiravan",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2"
+  }
+}
