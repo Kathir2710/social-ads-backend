@@ -48,7 +48,7 @@ app.all("/twitter/:endpoint(*)", async (req, res) => {
     const endpoint = req.params.endpoint;
     const method = req.method;
     const body = req.body;
-    const token = process.env.TWITTER_BEARER_TOKEN;
+    const token = process.env.TWITTER_BEARER;
 
     if (!token) return res.status(401).json({ error: "Missing Twitter Bearer Token" });
 
