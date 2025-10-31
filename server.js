@@ -35,58 +35,31 @@ app.post("/api/upload", upload.single("adFile"), (req, res) => {
   const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
   res.json({ message: "File uploaded successfully", url: fileUrl });
 });
-const CLIENT_ID = process.env.TWITTER_CLIENT_ID;
-const CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET;
-const REDIRECT_URI = "https://social-ads-backend.onrender.com/auth/twitter/callback";
 
-// 1️⃣ Redirect user to Twitter login
-app.get("/auth/twitter", (req, res) => {
-  const params = querystring.stringify({
-    response_type: "code",
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    scope: "tweet.read tweet.write users.read offline.access",
-    state: "secure123",
-    code_challenge: "challenge",
-    code_challenge_method: "plain"
-  });
-  res.redirect(`https://twitter.com/i/oauth2/authorize?${params}`);
-});
+// ---- Twitter Proxy ----
+// ================== TWITTER PROXY API ==================
 
-// 2️⃣ Callback to exchange code for access_token
-app.get("/auth/twitter/callback", async (req, res) => {
-  const { code } = req.query;
-  const tokenRes = await fetch("https://api.twitter.com/2/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: querystring.stringify({
-      client_id: CLIENT_ID,
-      grant_type: "authorization_code",
-      redirect_uri: REDIRECT_URI,
-      code,
-      code_verifier: "challenge"
-    })
-  });
-  const tokenData = await tokenRes.json();
-  console.log("Twitter token data:", tokenData);
-  res.json(tokenData);
-});
 
-// 3️⃣ Proxy request using user's access_token
+app.use(express.json());
+
+// Fetch Twitter Profile, Tweets, or Metrics via backend proxy
 app.all("/twitter/:endpoint(*)", async (req, res) => {
   try {
-    const { access_token } = req.headers; // Pass from frontend dynamically
-    if (!access_token)
-      return res.status(401).json({ error: "Missing Twitter user access_token" });
-
     const endpoint = req.params.endpoint;
+    const method = req.method;
+    const body = req.body;
+
+    // Your saved Bearer token from your Twitter App (OAuth 2.0 User Context)
+    const token = process.env.TWITTER_BEARER_TOKEN;
+    if (!token) return res.status(401).json({ error: "Missing Twitter Bearer Token" });
+
     const response = await fetch(`https://api.twitter.com/2/${endpoint}`, {
-      method: req.method,
+      method,
       headers: {
-        Authorization: `Bearer ${access_token}`,
+        "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       },
-      body: req.method === "POST" ? JSON.stringify(req.body) : undefined
+      body: method === "POST" ? JSON.stringify(body) : undefined
     });
 
     const data = await response.json();
@@ -96,6 +69,7 @@ app.all("/twitter/:endpoint(*)", async (req, res) => {
     res.status(500).json({ error: "Twitter proxy failed", details: err.message });
   }
 });
+
 // ---- YouTube Proxy (for analytics / uploads) ----
 app.all("/youtube/*", async (req, res) => {
   try {
