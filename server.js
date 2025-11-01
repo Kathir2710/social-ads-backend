@@ -66,24 +66,24 @@ app.all("/twitter/*", async (req, res) => {
 });
 
 // ---- YouTube Proxy (for analytics / uploads) ----
-app.all("/youtube/*", async (req, res) => {
-  try {
-    const endpoint = req.params[0];
-    const method = req.method;
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    const url = `https://www.googleapis.com/youtube/v3/${endpoint}`;
+// app.all("/youtube/*", async (req, res) => {
+//   try {
+//     const endpoint = req.params[0];
+//     const method = req.method;
+//     const token = req.headers.authorization?.replace("Bearer ", "");
+//     const url = `https://www.googleapis.com/youtube/v3/${endpoint}`;
 
-    const response = await fetch(url, {
-      method,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: method === "POST" ? JSON.stringify(req.body) : undefined,
-    });
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "YouTube proxy failed" });
-  }
-});
+//     const response = await fetch(url, {
+//       method,
+//       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+//       body: method === "POST" ? JSON.stringify(req.body) : undefined,
+//     });
+//     const data = await response.json();
+//     res.json(data);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "YouTube proxy failed" });
+//   }
+// });
 
 app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
