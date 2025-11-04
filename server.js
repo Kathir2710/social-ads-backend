@@ -69,7 +69,7 @@ app.all("/twitter/*", async (req, res) => {
   }
 });
 
-// ✅ YouTube proxy
+// ✅ YouTube proxy// ✅ YouTube proxy
 app.all("/youtube/*", async (req, res) => {
   try {
     const endpoint = req.params[0];
@@ -77,15 +77,23 @@ app.all("/youtube/*", async (req, res) => {
     const token = req.headers.authorization?.replace("Bearer ", "");
     const url = `https://www.googleapis.com/youtube/v3/${endpoint}`;
 
+    if (!token) {
+      return res.status(401).json({ error: "Missing Bearer token" });
+    }
+
     const response = await fetch(url, {
       method,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: method === "POST" ? JSON.stringify(req.body) : undefined,
     });
+
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("❌ YouTube proxy error:", err);
     res.status(500).json({ error: "YouTube proxy failed" });
   }
 });
@@ -96,24 +104,37 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
   const { title, description, privacyStatus } = req.body;
   const accessToken = req.headers.authorization?.replace("Bearer ", "");
 
-  if (!accessToken) return res.status(401).json({ error: "Missing access token" });
+  if (!accessToken) {
+    return res.status(401).json({ error: "Missing access token" });
+  }
 
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No video file uploaded" });
+    }
+
     const videoPath = path.resolve(req.file.path);
+    const videoSize = fs.statSync(videoPath).size;
+
+    console.log(`📹 Uploading video: ${title} (${(videoSize / 1024 / 1024).toFixed(2)} MB)`);
 
     // Step 1: Initiate resumable upload
-    const initRes = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Type": "video/*",
-      },
-      body: JSON.stringify({
-        snippet: { title, description },
-        status: { privacyStatus: privacyStatus || "private" },
-      }),
-    });
+    const initRes = await fetch(
+      "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": "video/*",
+          "X-Upload-Content-Length": videoSize.toString(),
+        },
+        body: JSON.stringify({
+          snippet: { title, description },
+          status: { privacyStatus: privacyStatus || "private" },
+        }),
+      }
+    );
 
     if (!initRes.ok) {
       const errText = await initRes.text();
@@ -121,20 +142,33 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
     }
 
     const uploadUrl = initRes.headers.get("location");
+    if (!uploadUrl) throw new Error("No upload URL received from YouTube API");
 
-    // Step 2: Upload video file
+    // Step 2: Upload the video file
     const videoStream = fs.createReadStream(videoPath);
     const uploadRes = await fetch(uploadUrl, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${accessToken}`, "Content-Length": fs.statSync(videoPath).size },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Length": videoSize,
+        "Content-Type": "video/*",
+      },
       body: videoStream,
     });
 
     const uploadData = await uploadRes.json();
-    fs.unlinkSync(videoPath); // clean temp file
-    res.json({ message: "✅ Video uploaded successfully", data: uploadData });
+
+    // Step 3: Clean up the uploaded file
+    fs.unlink(videoPath, (err) => {
+      if (err) console.warn("⚠️ Failed to delete temp file:", err);
+    });
+
+    res.json({
+      message: "✅ Video uploaded successfully",
+      data: uploadData,
+    });
   } catch (err) {
-    console.error("Upload failed:", err);
+    console.error("❌ Upload failed:", err);
     res.status(500).json({ error: "Upload failed", details: err.message });
   }
 });
