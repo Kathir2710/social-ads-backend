@@ -6,7 +6,7 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import {snapchatMetrics} from "./snapchatMetrics.js"; // ✅ import style for ESM
+
 
 dotenv.config();
 const app = express();
@@ -140,8 +140,7 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
 });
 
 
-app.get("/snapchat", snapchatMetrics);
-// app.listen(5000, () => console.log("Server running on port 5000"));
+
 
 // ✅ Single server listener
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
