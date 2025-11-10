@@ -118,7 +118,7 @@ app.post("/googleads-metrics", async (req, res) => {
     `;
 
     const response = await fetch(
-      `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:searchStream`,
+      `https://googleads.googleapis.com/v22/customers/${customerId}/googleAds:searchStream`,
       {
         method: "POST",
         headers: {
