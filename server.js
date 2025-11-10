@@ -83,7 +83,9 @@ app.post("/youtube-metrics", async (req, res) => {
 // ====== FETCH GOOGLE ADS METRICS (REACH, CTR, etc.) ======
 app.post("/googleads-metrics", async (req, res) => {
   try {
-    const { developerToken, customerId, accessToken } = req.body;
+    const { accessToken } = req.body;
+    const developerToken = process.env.YOUR_GOOGLE_ADS_DEVELOPER_TOKEN;
+    const customerId = process.env.YOUR_AD_ACCOUNT_ID;
 
     const query = `
       SELECT
@@ -110,13 +112,16 @@ app.post("/googleads-metrics", async (req, res) => {
       }
     );
 
-    const data = await response.json();
+    const text = await response.text(); // 👈 log raw response
+    console.log("Google Ads raw response:", text);
+    const data = JSON.parse(text);
     res.json(data);
   } catch (err) {
     console.error("Google Ads Metrics Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 app.listen(PORT, () =>
   console.log(`✅ Server running on http://localhost:${PORT}`)
