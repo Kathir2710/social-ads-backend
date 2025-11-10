@@ -81,6 +81,24 @@ app.post("/youtube-metrics", async (req, res) => {
 });
 
 // ====== FETCH GOOGLE ADS METRICS (REACH, CTR, etc.) ======
+// ====== FETCH YOUTUBE ORGANIC METRICS ======
+app.post("/youtube-metrics", async (req, res) => {
+  try {
+    const { accessToken, videoId } = req.body;
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ====== FETCH GOOGLE ADS METRICS (REACH, CTR, etc.) ======
 app.post("/googleads-metrics", async (req, res) => {
   try {
     const { accessToken } = req.body;
@@ -100,7 +118,7 @@ app.post("/googleads-metrics", async (req, res) => {
     `;
 
     const response = await fetch(
-      `https://googleads.googleapis.com/v15/customers/${customerId}/googleAds:searchStream`,
+      `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:searchStream`,
       {
         method: "POST",
         headers: {
@@ -115,7 +133,12 @@ app.post("/googleads-metrics", async (req, res) => {
 
     const text = await response.text(); // 👈 log raw response
     console.log("Google Ads raw response:", text);
-    const data = JSON.parse(text);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Invalid JSON response from Google Ads API");
+    }
     res.json(data);
   } catch (err) {
     console.error("Google Ads Metrics Error:", err);
