@@ -106,6 +106,7 @@ app.post("/googleads-metrics", async (req, res) => {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "developer-token": developerToken,
+          "login-customer-id": process.env.YOUR_MANAGER_ACCOUNT_ID,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ query }),
