@@ -4,25 +4,75 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import cors from "cors";
 import fs from "fs";
-import path from "path";
+import { OAuth2Client } from "google-auth-library";
 
 dotenv.config();
 const app = express();
-app.use(cors({
-  origin: "https://data-add-management.netlify.app", // your frontend URL
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
 app.use(express.json());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 const upload = multer({ dest: "uploads/" });
 
-const PORT = process.env.PORT || 5000;
+// ------------------ GOOGLE OAUTH SETUP ------------------
 
-// ====== UPLOAD VIDEO TO YOUTUBE ======
+const oauthClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.REDIRECT_URI
+);
+
+let ADS_ACCESS_TOKEN = "";
+let ADS_REFRESH_TOKEN = "";
+
+// STEP 1: Redirect user to Google login
+app.get("/google/login", (req, res) => {
+  const url = oauthClient.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: [
+      "https://www.googleapis.com/auth/adwords", 
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube.readonly"
+    ],
+  });
+  res.redirect(url);
+});
+
+// STEP 2: Google redirects user back here
+app.get("/google/callback", async (req, res) => {
+  const { code } = req.query;
+
+  const { tokens } = await oauthClient.getToken(code);
+
+  ADS_ACCESS_TOKEN = tokens.access_token;
+  ADS_REFRESH_TOKEN = tokens.refresh_token;
+
+  res.send("Google Login Success. You can now fetch metrics.");
+});
+
+// Auto-refresh Google Ads token when needed
+async function getValidAccessToken() {
+  if (!ADS_REFRESH_TOKEN) throw new Error("User not logged in");
+
+  const { credentials } = await oauthClient.refreshToken(ADS_REFRESH_TOKEN);
+  ADS_ACCESS_TOKEN = credentials.access_token;
+
+  return ADS_ACCESS_TOKEN;
+}
+
+// ------------------ YOUTUBE VIDEO UPLOAD ------------------
+
 app.post("/upload-video", upload.single("video"), async (req, res) => {
   try {
+    const accessToken = await getValidAccessToken();
+
     const { title, description, privacyStatus } = req.body;
-    const accessToken = req.headers.authorization?.split(" ")[1];
     const videoPath = req.file.path;
 
     const metadata = {
@@ -30,7 +80,7 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
       status: { privacyStatus },
     };
 
-    const response = await fetch(
+    const initRes = await fetch(
       "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
       {
         method: "POST",
@@ -42,11 +92,7 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
       }
     );
 
-    if (!response.ok) {
-      return res.status(400).json({ error: "Failed to create upload session" });
-    }
-
-    const uploadUrl = response.headers.get("location");
+    const uploadUrl = initRes.headers.get("location");
     const videoData = fs.readFileSync(videoPath);
 
     const uploadRes = await fetch(uploadUrl, {
@@ -62,52 +108,15 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
     const result = await uploadRes.json();
     res.json({ success: true, videoId: result.id });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ====== FETCH YOUTUBE ORGANIC METRICS ======
-app.post("/youtube-metrics", async (req, res) => {
-  try {
-    const { accessToken, videoId } = req.body;
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ------------------ GOOGLE ADS METRICS ------------------
 
-// ====== FETCH GOOGLE ADS METRICS (REACH, CTR, etc.) ======
-// ====== FETCH YOUTUBE ORGANIC METRICS ======
-app.post("/youtube-metrics", async (req, res) => {
+app.get("/googleads-metrics", async (req, res) => {
   try {
-    const { accessToken, videoId } = req.body;
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ====== FETCH GOOGLE ADS METRICS (REACH, CTR, etc.) ======
-app.post("/googleads-metrics", async (req, res) => {
-  try {
-    const { accessToken } = req.body;
-    const developerToken = process.env.YOUR_GOOGLE_ADS_DEVELOPER_TOKEN;
-    const customerId = process.env.YOUR_AD_ACCOUNT_ID;
+    const accessToken = await getValidAccessToken();
 
     const query = `
       SELECT
@@ -115,42 +124,34 @@ app.post("/googleads-metrics", async (req, res) => {
         metrics.impressions,
         metrics.clicks,
         metrics.ctr,
-        metrics.average_cpc,
         metrics.cost_micros
       FROM campaign
       WHERE segments.date DURING LAST_7_DAYS
     `;
 
     const response = await fetch(
-      `https://googleads.googleapis.com/v22/customers/${customerId}/googleAds:searchStream`,
+      `https://googleads.googleapis.com/v14/customers/${process.env.CUSTOMER_ID}/googleAds:search`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "developer-token": developerToken,
-          "login-customer-id": process.env.YOUR_MANAGER_ACCOUNT_ID,
+          "developer-token": process.env.DEVELOPER_TOKEN,
+          "login-customer-id": process.env.MANAGER_ID,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ query }),
       }
     );
 
-    const text = await response.text(); // 👈 log raw response
-    console.log("Google Ads raw response:", text);
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error("Invalid JSON response from Google Ads API");
-    }
+    const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error("Google Ads Metrics Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
+// ------------------ SERVER ------------------
 
-app.listen(PORT, () =>
-  console.log(`✅ Server running on http://localhost:${PORT}`)
-);
+app.listen(process.env.PORT || 5000, () => {
+  console.log("Server running...");
+});
