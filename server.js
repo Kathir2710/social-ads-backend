@@ -31,12 +31,14 @@ app.get("/google/login", (req, res) => {
   const url = oauthClient.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
+    redirect_uri: process.env.REDIRECT_URI,   // <-- REQUIRED
     scope: [
       "https://www.googleapis.com/auth/adwords",
       "https://www.googleapis.com/auth/youtube.upload",
       "https://www.googleapis.com/auth/youtube.readonly"
     ],
   });
+
   res.redirect(url);
 });
 
