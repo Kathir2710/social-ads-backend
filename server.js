@@ -8,18 +8,13 @@ import { OAuth2Client } from "google-auth-library";
 
 dotenv.config();
 const app = express();
+
 app.use(express.json());
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL,
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors({ origin: process.env.FRONTEND_URL }));
 
 const upload = multer({ dest: "uploads/" });
 
-// ------------------ GOOGLE OAUTH SETUP ------------------
+// --------------------------- GOOGLE OAUTH ------------------------------
 
 const oauthClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
@@ -27,16 +22,17 @@ const oauthClient = new OAuth2Client(
   process.env.REDIRECT_URI
 );
 
-let ADS_ACCESS_TOKEN = "";
-let ADS_REFRESH_TOKEN = "";
+let TOKENS = {
+  access: "",
+  refresh: ""
+};
 
-// STEP 1: Redirect user to Google login
 app.get("/google/login", (req, res) => {
   const url = oauthClient.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: [
-      "https://www.googleapis.com/auth/adwords", 
+      "https://www.googleapis.com/auth/adwords",
       "https://www.googleapis.com/auth/youtube.upload",
       "https://www.googleapis.com/auth/youtube.readonly"
     ],
@@ -44,42 +40,45 @@ app.get("/google/login", (req, res) => {
   res.redirect(url);
 });
 
-// STEP 2: Google redirects user back here
 app.get("/google/callback", async (req, res) => {
-  const { code } = req.query;
+  try {
+    const { code } = req.query;
 
-  const { tokens } = await oauthClient.getToken(code);
+    const { tokens } = await oauthClient.getToken(code);
 
-  ADS_ACCESS_TOKEN = tokens.access_token;
-  ADS_REFRESH_TOKEN = tokens.refresh_token;
+    TOKENS.access = tokens.access_token;
+    TOKENS.refresh = tokens.refresh_token;
 
-  res.send("Google Login Success. You can now fetch metrics.");
+    res.send("Login successful. You may close this tab.");
+  } catch (e) {
+    res.status(500).send("OAuth failed: " + e.message);
+  }
 });
 
-// Auto-refresh Google Ads token when needed
-async function getValidAccessToken() {
-  if (!ADS_REFRESH_TOKEN) throw new Error("User not logged in");
+async function getAccessToken() {
+  if (!TOKENS.refresh) throw new Error("User has not logged in");
 
-  const { credentials } = await oauthClient.refreshToken(ADS_REFRESH_TOKEN);
-  ADS_ACCESS_TOKEN = credentials.access_token;
+  const { credentials } = await oauthClient.refreshToken(TOKENS.refresh);
+  TOKENS.access = credentials.access_token;
 
-  return ADS_ACCESS_TOKEN;
+  return TOKENS.access;
 }
 
-// ------------------ YOUTUBE VIDEO UPLOAD ------------------
+// --------------------------- YOUTUBE UPLOAD ------------------------------
 
 app.post("/upload-video", upload.single("video"), async (req, res) => {
   try {
-    const accessToken = await getValidAccessToken();
+    const accessToken = await getAccessToken();
 
     const { title, description, privacyStatus } = req.body;
     const videoPath = req.file.path;
 
     const metadata = {
       snippet: { title, description },
-      status: { privacyStatus },
+      status: { privacyStatus }
     };
 
+    // STEP 1: INIT
     const initRes = await fetch(
       "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
       {
@@ -95,6 +94,7 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
     const uploadUrl = initRes.headers.get("location");
     const videoData = fs.readFileSync(videoPath);
 
+    // STEP 2: UPLOAD RAW VIDEO
     const uploadRes = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
@@ -105,6 +105,7 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
     });
 
     fs.unlinkSync(videoPath);
+
     const result = await uploadRes.json();
     res.json({ success: true, videoId: result.id });
   } catch (err) {
@@ -112,11 +113,11 @@ app.post("/upload-video", upload.single("video"), async (req, res) => {
   }
 });
 
-// ------------------ GOOGLE ADS METRICS ------------------
+// --------------------------- GOOGLE ADS METRICS ------------------------------
 
 app.get("/googleads-metrics", async (req, res) => {
   try {
-    const accessToken = await getValidAccessToken();
+    const accessToken = await getAccessToken();
 
     const query = `
       SELECT
@@ -150,7 +151,7 @@ app.get("/googleads-metrics", async (req, res) => {
   }
 });
 
-// ------------------ SERVER ------------------
+// --------------------------- START SERVER ------------------------------
 
 app.listen(process.env.PORT || 5000, () => {
   console.log("Server running...");
