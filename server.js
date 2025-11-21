@@ -47,15 +47,13 @@ app.get("/google/login", (req, res) => {
 
 app.get("/google/callback", async (req, res) => {
   try {
-    console.log("Callback hit. Query =", req.query);
-
     const code = req.query.code;
+    console.log("Callback received code:", code);
 
     if (!code) {
-      return res.status(400).send("OAuth failed: No code received");
+      return res.status(400).send("No OAuth code received.");
     }
 
-    // EXCHANGE CODE FOR TOKENS
     const { tokens } = await oauthClient.getToken({
       code,
       redirect_uri: process.env.REDIRECT_URI
@@ -64,16 +62,17 @@ app.get("/google/callback", async (req, res) => {
     TOKENS.access = tokens.access_token;
     TOKENS.refresh = tokens.refresh_token;
 
-    console.log("Tokens saved:", tokens);
+    console.log("Tokens saved successfully");
 
-    // Redirect user to your dashboard
+    // REDIRECT BACK TO FRONTEND DASHBOARD
     return res.redirect(process.env.FRONTEND_URL + "/?loggedIn=true");
 
-  } catch (e) {
-    console.error("OAuth Error:", e);
-    res.status(500).send("OAuth failed: " + e.message);
+  } catch (error) {
+    console.error("OAuth Error:", error);
+    return res.status(500).send("OAuth failed: " + error.message);
   }
 });
+
 
 
 
