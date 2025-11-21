@@ -50,8 +50,12 @@ app.get("/google/callback", async (req, res) => {
     console.log("Callback hit. Query =", req.query);
 
     const code = req.query.code;
-    if (!code) return res.status(400).send("No code provided.");
 
+    if (!code) {
+      return res.status(400).send("OAuth failed: No code received");
+    }
+
+    // EXCHANGE CODE FOR TOKENS
     const { tokens } = await oauthClient.getToken({
       code,
       redirect_uri: process.env.REDIRECT_URI
@@ -62,14 +66,15 @@ app.get("/google/callback", async (req, res) => {
 
     console.log("Tokens saved:", tokens);
 
-    // Redirect to your dashboard
-    res.redirect(process.env.FRONTEND_URL + "/?loggedIn=true");
+    // Redirect user to your dashboard
+    return res.redirect(process.env.FRONTEND_URL + "/?loggedIn=true");
 
   } catch (e) {
     console.error("OAuth Error:", e);
     res.status(500).send("OAuth failed: " + e.message);
   }
 });
+
 
 
 async function getAccessToken() {
