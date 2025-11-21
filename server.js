@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 import cors from "cors";
 import fs from "fs";
 import { OAuth2Client } from "google-auth-library";
+console.log("BACKEND REDIRECT_URI =", process.env.REDIRECT_URI);
+
 
 dotenv.config();
 const app = express();
@@ -37,8 +39,9 @@ app.get("/google/login", (req, res) => {
       "https://www.googleapis.com/auth/youtube.upload",
       "https://www.googleapis.com/auth/youtube.readonly"
     ],
+    
   });
-
+  console.log("LOGIN REDIRECT =", process.env.REDIRECT_URI);
   res.redirect(url);
 });
 
