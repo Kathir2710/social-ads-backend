@@ -47,19 +47,32 @@ app.get("/google/login", (req, res) => {
 
 app.get("/google/callback", async (req, res) => {
   try {
-    const { code } = req.query;
+    console.log("Callback hit. Query =", req.query);
 
-    const { tokens } = await oauthClient.getToken(code);
+    const code = req.query.code;
+
+    if (!code) {
+      return res.status(400).send("No ?code received");
+    }
+
+    const { tokens } = await oauthClient.getToken({
+      code,
+      redirect_uri: process.env.REDIRECT_URI
+    });
 
     TOKENS.access = tokens.access_token;
     TOKENS.refresh = tokens.refresh_token;
 
+    console.log("OAuth tokens stored:", tokens);
+
     res.redirect(process.env.FRONTEND_URL + "/?loggedIn=true");
 
   } catch (e) {
+    console.error("OAuth error:", e);
     res.status(500).send("OAuth failed: " + e.message);
   }
 });
+
 
 async function getAccessToken() {
   if (!TOKENS.refresh) throw new Error("User has not logged in");
