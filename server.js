@@ -54,7 +54,8 @@ app.get("/google/callback", async (req, res) => {
     TOKENS.access = tokens.access_token;
     TOKENS.refresh = tokens.refresh_token;
 
-    res.send("Login successful. You may close this tab.");
+    res.redirect(process.env.FRONTEND_URL + "/?loggedIn=true");
+
   } catch (e) {
     res.status(500).send("OAuth failed: " + e.message);
   }
